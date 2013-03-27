@@ -977,8 +977,9 @@ def main_menu():
         libtcod.console_set_default_foreground(0, libtcod.light_purple)
         libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-4, libtcod.BKGND_NONE, libtcod.CENTER,
             'ROGUELIKE FOR THE TKK PYTHON COURSE')
-        libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT-2, libtcod.BKGND_NONE, libtcod.CENTER,
+        libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT-20, libtcod.BKGND_NONE, libtcod.CENTER,
             'Made by 79040A')
+        libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT-18, libtcod.BKGND_NONE, libtcod.CENTER, 'Gnomovision version 69, Copyright (C) 2013 Aleksi Salonen\nGnomovision comes with ABSOLUTELY NO WARRANTY;\n This is free software, and you are welcome\nto redistribute it under certain conditions;')
  
         #show options and wait for the player's choice
         choice = menu('', ['NEW GAME', 'LOAD GAME', 'QUIT'], 24)
