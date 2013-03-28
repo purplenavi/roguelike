@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import libtcodpy as libtcod
 import math
 import textwrap
