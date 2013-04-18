@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import libtcodpy as libtcod
 import math
 import textwrap
@@ -463,6 +462,9 @@ def render_all():
     if dungeon_level == 1:
         libtcod.console_set_default_foreground(panel, libtcod.light_green)
         libtcod.console_print_ex(panel, 1, 3, libtcod.BKGND_NONE, libtcod.LEFT, 'World map')
+    elif dungeon_level == 0:
+        libtcod.console_set_default_foreground(panel, libtcod.dark_red)
+        libtcod.console_print_ex(panel, 1, 3, libtcod.BKGND_NONE, libtcod.LEFT, 'BATTLE!')
     else:
         libtcod.console_print_ex(panel, 1, 3, libtcod.BKGND_NONE, libtcod.LEFT, 'Dungeon lvl ' + str(dungeon_level - 1))
  
@@ -572,24 +574,71 @@ def handle_keys():
         #movement keys
         if key.vk == libtcod.KEY_UP or key.vk == libtcod.KEY_KP8:
             player_move_or_attack(0, -1)
+            if dungeon_level == 1:
+                create_world_message()
+                random_battle()
+            if dungeon_level == 0:
+                leave_random()
  
         elif key.vk == libtcod.KEY_DOWN or key.vk == libtcod.KEY_KP2:
             player_move_or_attack(0, 1)
+            if dungeon_level == 1:
+                create_world_message()
+                random_battle()
+            if dungeon_level == 0:
+                leave_random()
  
         elif key.vk == libtcod.KEY_LEFT or key.vk == libtcod.KEY_KP4:
             player_move_or_attack(-1, 0)
+            if dungeon_level == 1:
+                create_world_message()
+                random_battle()
+            if dungeon_level == 0:
+                leave_random()
  
         elif key.vk == libtcod.KEY_RIGHT or key.vk == libtcod.KEY_KP6:
             player_move_or_attack(1, 0)
+            if dungeon_level == 1:
+                create_world_message()
+                random_battle()
+            if dungeon_level == 0:
+                leave_random()
+                
         elif key.vk == libtcod.KEY_KP7:
             player_move_or_attack(-1, -1)
+            if dungeon_level == 1:
+                create_world_message()
+                random_battle()
+            if dungeon_level == 0:
+                leave_random()
+                
         elif key.vk == libtcod.KEY_KP9:
             player_move_or_attack(1, -1)
+            if dungeon_level == 1:
+                create_world_message()
+                random_battle()
+            if dungeon_level == 0:
+                leave_random()
+                
         elif key.vk == libtcod.KEY_KP1:
             player_move_or_attack(-1, 1)
+            if dungeon_level == 1:
+                create_world_message()
+                random_battle()
+            if dungeon_level == 0:
+                leave_random()
+                
         elif key.vk == libtcod.KEY_KP3:
             player_move_or_attack(1, 1)
+            if dungeon_level == 1:
+                create_world_message()
+                random_battle()
+            if dungeon_level == 0:
+                leave_random()
+                
         elif key.vk == libtcod.KEY_KP5:
+            if dungeon_level == 1:
+                create_world_message()
             pass
         else:
             #test for other keys
@@ -712,7 +761,10 @@ def save_game():
     savefile['inventory'] = inventory
     savefile['game_msgs'] = game_msgs
     savefile['game_state'] = game_state
-    savefile['stairs_index'] = objects.index(stairs)
+    if not stairs == None and not dungeon_level == 0:
+            savefile['stairs_index'] = objects.index(stairs)
+    else:
+        savefile['stairs_index'] = None
     if not upstairs == None:
         savefile['upstairs_index'] = objects.index(upstairs)
     else:
@@ -746,6 +798,74 @@ def load_game():
     loadfile.close()
     os.remove('save')
     initialize_fov()
+    
+def create_world_message():
+    rand_int = libtcod.random_get_int(0, 1, 10)
+    if rand_int > 7:
+        x = player.x
+        y = player.y
+        for obj in objects:
+            if obj.x == x and obj.y == y and not obj.name == 'player':
+                if rand_int == 8:
+                    message(obj.name + '. A light breeze. Sunny.', game_msgs, libtcod.green)
+                if rand_int == 9:
+                    message(obj.name + '. Rain is pouring down. Cloudy.', game_msgs, libtcod.blue)
+                if rand_int == 10:
+                    message(obj.name + '. Perfect weather. You feel relaxed.', game_msgs, libtcod.yellow)
+                 
+def random_battle():
+    global dungeon, objects, level_objects, dungeon_level, dungeon_levels, random_x, random_y
+    
+    rand_int = libtcod.random_get_int(0, 1, 12)
+    if rand_int > 11:
+        dungeon_level = 0
+        random_x = player.x
+        random_y = player.y
+        for obj in objects:
+            if obj.x == random_x and obj.y == random_y and not obj.name == 'player' and not obj.name == 'stairs':
+                primary_type_name = obj.name
+                print obj.name
+                primary_color = obj.color
+                primary_terrain = obj.char
+                for z in objects:
+                    if z.name == 'player':
+                        objects.remove(z)
+                message('You are under attack!', game_msgs, libtcod.red)
+                level_objects.append(objects)
+                dungeon_levels.append(dungeon)
+                objects = [player]
+                dungeon = Dungeon(MAP_HEIGHT, MAP_WIDTH)
+                player.x = MAP_WIDTH / 2
+                player.y = MAP_HEIGHT / 2
+                for x in range(0, MAP_WIDTH - 1):
+                    for y in range(0, MAP_HEIGHT - 1):
+                        dungeon.get_dungeon()[x][y].blocked = False
+                        dungeon.get_dungeon()[x][y].block_sight = False
+                        rand_terrain = libtcod.random_get_int(0, 1, 10)
+                        if rand_terrain < 8: #Primary terrain
+                            ro = game_object(x, y, primary_terrain, primary_type_name, primary_color, always_visible=True)
+                        else:
+                            if primary_type_name == 'grass':
+                                ro = game_object(x, y, '&', 'tree', libtcod.dark_green, always_visible=True)
+                            else:
+                                ro = game_object(x, y, '"', 'grass', libtcod.green, always_visible=True)
+                        objects.append(ro)
+                initialize_fov()
+                break
+            
+def leave_random():
+    global player, dungeon, dungeon_level, objects, level_objects
+    if player.x < 3 or player.x > MAP_WIDTH - 3 or player.y < 3 or player.y > MAP_HEIGHT - 3:#Exit to worldmap
+        dungeon = dungeon_levels[-1]
+        objects = level_objects[-1]
+        dungeon_levels.remove(dungeon)
+        level_objects.remove(objects)
+        dungeon_level = 1
+        objects.append(player)
+        player.set_cords(random_x, random_y)
+        initialize_fov()
+                
+                
  
 def new_game():
     global player, inventory, game_msgs, game_state, dungeon_level, dungeon_levels, level_objects, dungeon, objects, world_loc, stairs
@@ -780,15 +900,19 @@ def new_game():
                     world.get_dungeon()[x][y].blocked = False
                     world.get_dungeon()[x][y].block_sight = False
                     if z == '&':
-                        wmo = game_object(x, y, z, 'Tree', libtcod.green)
+                        wmo = game_object(x, y, z, 'tree', libtcod.green, always_visible=True)
                     elif z == 'o':
-                        stairs = game_object(x, y, z, 'stairs', libtcod.light_blue)
+                        stairs = game_object(x, y, z, 'stairs', libtcod.light_blue, always_visible=True)
                         objects.append(stairs)
                         stairs.send_to_back()
                     elif z == '"':
-                        wmo = game_object(x, y, z, 'grass', libtcod.dark_green)
+                        wmo = game_object(x, y, z, 'grass', libtcod.dark_green, always_visible=True)
+                    elif z == '=':
+                        wmo = game_object(x, y, z, 'water', libtcod.blue, always_visible=True)
+                    elif z == '.':
+                        wmo = game_object(x, y, z, 'rocks', libtcod.gray, always_visible=True)
                     else:
-                        wmo = game_object(x, y, z, 'plain', libtcod.brass)
+                        wmo = game_object(x, y, z, 'plain', libtcod.brass, always_visible=True)
                     objects.append(wmo)
                     wmo.send_to_back()
                 else:
@@ -800,10 +924,7 @@ def new_game():
     dungeon_levels.append(dungeon)
     world_loc = True
     
- 
-    #generate dungeon (at this point it's not drawn to the screen)
     dungeon_level = 1
-    #make_map()
     initialize_fov()
  
     game_state = 'playing'
@@ -822,7 +943,9 @@ def new_game():
 def next_level():
     global dungeon_level, dungeon, objects, level_objects, world_loc, stairs, upstairs
     dungeon_level += 1
-    objects.remove(player)
+    for obj in objects:
+        if obj.name == 'player':
+            objects.remove(obj)
     if world_loc == True:
         world_loc = False
     if len(dungeon_levels) >= dungeon_level:
@@ -883,7 +1006,7 @@ def random_choice_index(chances):
         if dice <= running_sum:
             return choice
         choice+=1
-    
+        
 def check_level_up():
     level_up_xp = LEVEL_UP_BASE + player.level * LEVEL_UP_FACTOR
     if player.fighter.xp >= level_up_xp:
@@ -980,7 +1103,7 @@ def main_menu():
             'ROGUELIKE FOR THE TKK PYTHON COURSE')
         libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT-20, libtcod.BKGND_NONE, libtcod.CENTER,
             'Made by 79040A')
-        libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT-18, libtcod.BKGND_NONE, libtcod.CENTER, 'Gnomovision version 69, Copyright (C) 2013 Aleksi Salonen\nGnomovision comes with ABSOLUTELY NO WARRANTY;\n This is free software, and you are welcome\nto redistribute it under certain conditions;')
+        libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT-18, libtcod.BKGND_NONE, libtcod.CENTER, 'Alex Roguelike, Copyright (C) 2013 Aleksi Salonen\nAlex Roguelike comes with ABSOLUTELY NO WARRANTY;\n This is free software, and you are welcome\nto redistribute it under certain conditions;')
  
         #show options and wait for the player's choice
         choice = menu('', ['NEW GAME', 'LOAD GAME', 'QUIT'], 24)
@@ -1009,6 +1132,8 @@ level_objects = []
 upstairs = None
 stairs = None
 player = None
+random_x = None
+random_y = None
 pygame.init()
 pygame.mixer.init()
  
