@@ -7,10 +7,12 @@ import libtcodpy as libtcod
 from Tile import *
 
 class Dungeon:
-    def __init__(self, h, w):
+    def __init__(self, h, w): 
         self.dungeon = [[ Tile(True)
         for y in range(h) ]
             for x in range(w) ]
+        self.h = h
+        self.w = w
     
     def is_blocked(self, x, y, objects):
     #first test the map tile
