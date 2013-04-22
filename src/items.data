@@ -1,0 +1,9 @@
+#Items data file
+#Contains all item-related data used in the game
+#example: healing potion#!#violet(name, char, color, chance, level, use_function)
+healing potion#!#violet#10#0#heal
+potion of strength#!#red#3#0#strength
+potion of defense#!#gray#3#0#defense
+rusty dagger#/#sky#5#1#equip-right hand
+rugged leather armour#¤#brass#5#2#equip-torso
+broadsword#/#red#1#5#equip-right hand

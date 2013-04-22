@@ -17,6 +17,14 @@ class Spell:
             self.cast_heal(game_msgs, player)
             self.number-= 1
             return self.number
+        if self.spell_function == 'strength':
+            self.cast_strength(game_msgs, player)
+            self.number-= 1
+            return self.number
+        if self.spell_function == 'defense':
+            self.cast_defense(game_msgs, player)
+            self.number-= 1
+            return self.number
         else:
             print 'You dumb shit'
         """elif self.spell_function == 'fireball':
@@ -27,6 +35,12 @@ class Spell:
             self.cast_confuse()"""
         
             
+    def cast_strength(self, game_msgs, player):
+        pass
+    
+    def cast_defense(self, game_msgs, player):        
+        pass
+    
     def cast_heal(self, game_msgs, player):
         #heal the player
         if player.fighter.hp == player.fighter.max_hp:

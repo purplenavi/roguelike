@@ -1,0 +1,14 @@
+#Monster data file
+#Contains all monster related data
+#Example: Orc#5#1#10#15#o#green (Power, defence, hitpoints, base experience, character, color)
+orc#3#1#15#12#o#green
+goblin#2#1#10#7#g#light_green
+puny goblin#1#0#10#5#g#light_green
+troll#8#2#30#30#T#dark_green
+ant warrior#3#2#15#15#a#brass
+ant queen#10#4#25#70#q#gray
+raider#4#2#20#20#R#brass
+necromancer#1#2#15#50#N#red
+lizardman#5#3#15#25#L#dark_green
+beetle#2#2#10#10#B#dark_red
+ogre#10#1#35#40#O#light_green

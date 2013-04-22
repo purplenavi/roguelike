@@ -257,20 +257,54 @@ def make_map():
     stairs.send_to_back()#Drawn under monsters
     dungeon_levels.append(dungeon)
  
+def random_battle_place_objects():
+    monster_data = open('monsters.data')
+    monzters = []
+    for mon in monster_data:
+        if not mon.startswith('#'):
+            monstr = mon.split('#')
+            monstr = [item.strip() for item in monstr]
+            monzters.append(monstr)
+    group_size = libtcod.random_get_int(0, 1, 3)
+    group_name = None
+    group_n = None
+    if group_size == 1:
+        group_name = 'group'
+        group_n = 6
+    elif group_size == 2:
+        group_name = 'pack'
+        group_n = 12
+    else:
+        group_name = 'horde'
+        group_n = 25
+    monster_type = monzters[libtcod.random_get_int(0, 0, len(monzters) - 1)]
+
+    for z in range(0, group_n):
+        while 1:
+            x = libtcod.random_get_int(0, 4, MAP_WIDTH - 4)
+            y = libtcod.random_get_int(0, 4, MAP_HEIGHT - 4)
+            if not dungeon.is_blocked(x, y, objects):
+                break
+        fighter_component = Fighter(hp=int(monster_type[3]), defense=int(monster_type[2]), power=int(monster_type[1]), xp=int(monster_type[4]), death_function=monster_death)
+        ai_component = BasicMonster(player)
+        monster = game_object(x, y, monster_type[5], monster_type[0], monster_colors[monster_type[6]], blocks=True, fighter=fighter_component, ai=ai_component)
+        objects.append(monster)
+    message('You encounter a wandering ' + group_name + ' of ' + monster_type[0] + 's.', game_msgs, libtcod.red)
+        
  
 def place_objects(room):
     #choose random number of monsters
+    monster_data = open('monsters.data')
+    monzters = []
+    for mon in monster_data:
+        if not mon.startswith('#'):
+            mons = mon.split('#')
     max_monsters = from_dungeon_level([[2, 1], [3, 2], [5, 4]])
     monster_chances = {}
     monster_chances['orc'] = 80
     monster_chances['troll'] = from_dungeon_level([[15, 3], [30, 5], [60, 7]])
     monster_chances['emperor moloch'] = from_dungeon_level([[10, 5], [50, 7]])
     max_items = from_dungeon_level([[1, 1], [2, 4]])
-    item_chances = {}
-    item_chances['heal'] = 40
-    item_chances['sword'] = 10
-    item_chances['armor'] = 10
-    item_chances['shit'] = 10
     
     num_monsters = libtcod.random_get_int(0, 0, max_monsters)
  
@@ -311,40 +345,63 @@ def place_objects(room):
  
         #only place it if the tile is not blocked
         if not dungeon.is_blocked(x, y, objects):
-            choice = random_choice(item_chances)
-            if choice == 'heal':
-                #create a healing potion (70% chance)
-                item_component = Item(spell=Spell(3, player, 'heal'))
- 
-                item = game_object(x, y, '!', 'healing potion', libtcod.violet, item=item_component)
-            elif choice == 'sword':
-                equipment_component = Equipment(slot='right hand', power_bonus=3)
-                item = game_object(x, y, '/', 'rusty dagger', libtcod.sky, equipment=equipment_component)
-            elif choice == 'armor':
-                equipment_component = Equipment(slot='chest', defense_bonus=4)
-                item = game_object(x, y, '*', 'rugged leather armor', libtcod.brass, equipment=equipment_component)
-            elif choice == 'shit':
-                item_component = Item()
-                item = game_object(x, y, '+', 'dogshit', libtcod.red, item=item_component)
+            item = generate_item(x, y)
             objects.append(item)
-            item.send_to_back()  #items appear below other objects
-            """elif dice < 70+10:
-                #create a lightning bolt scroll (10% chance)
-                item_component = Item(use_function=cast_lightning)
  
-                item = game_object(x, y, '#', 'scroll of lightning bolt', libtcod.light_yellow, item=item_component)
-            elif dice < 70+10+10:
-                #create a fireball scroll (10% chance)
-                item_component = Item(use_function=cast_fireball)
- 
-                item = game_object(x, y, '#', 'scroll of fireball', libtcod.light_yellow, item=item_component)
-            else:
-                #create a confuse scroll (10% chance)
-                    item_component = Item(use_function=cast_confuse)
- 
-                item = game_object(x, y, '#', 'scroll of confusion', libtcod.light_yellow, item=item_component)"""
- 
-                
+def generate_item(x, y):
+    item_file = open('items.data')
+    all_items = []
+    total_chance = 0
+    for line in item_file:
+        if not line.startswith('#'):
+            line = line.split('#')
+            tmp_item = []
+            name = line[0]
+            char = line[1]
+            color = line[2]
+            chance = int(line[3])
+            level = int(line[4])
+            use_f = line[5]
+            total_chance += chance
+            tmp_item.append(name)
+            tmp_item.append(char)
+            tmp_item.append(color)
+            tmp_item.append(chance)
+            tmp_item.append(level)
+            tmp_item.append(use_f)
+            all_items.append(tmp_item)
+    rand_number = libtcod.random_get_int(0, 1, total_chance)
+    off_chance = 0
+    item = None
+    for i in all_items:
+        chance = i[3]
+        increase_off = chance
+        chance += off_chance
+        off_chance += increase_off
+        if chance >= rand_number:
+            uf = i[5]
+            uf = uf.strip()
+            uf = uf.split('-')
+            level = i[4]
+            if uf[0] == 'equip':
+                for key in item_properties:
+                    if key in i[0]:
+                        value = item_properties[key]
+                        if value == 'power':
+                            equipment_component = Equipment(slot=uf[1], power_bonus = level)
+                            break
+                        if value == 'defense':
+                            equipment_component = Equipment(slot=uf[1], defense_bonus = level)
+                            break
+                        if value == 'magic':
+                            pass
+                item = game_object(x, y, i[1], i[0], i[2], equipment=equipment_component)
+                break
+            else: #usable item
+                item_component = Item(spell=Spell(3, player, uf[0]))
+                item = game_object(x, y, i[1], i[0], i[2], item=item_component)
+                break
+    return item
  
  
 def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
@@ -361,7 +418,7 @@ def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
         libtcod.console_rect(panel, x, y, bar_width, 1, False, libtcod.BKGND_SCREEN)
  
     #finally, some centered text with the values
-    libtcod.console_set_default_foreground(panel, libtcod.dark_red)
+    libtcod.console_set_default_foreground(panel, libtcod.black)
     libtcod.console_print_ex(panel, x + total_width / 2, y, libtcod.BKGND_NONE, libtcod.CENTER,
         name + ': ' + str(value) + '/' + str(maximum))
  
@@ -458,7 +515,7 @@ def render_all():
  
     #show the player's stats
     render_bar(1, 1, BAR_WIDTH, 'Life', player.fighter.hp, player.fighter.max_hp,
-        libtcod.crimson, libtcod.dark_yellow)
+        libtcod.green, libtcod.dark_red)
     if dungeon_level == 1:
         libtcod.console_set_default_foreground(panel, libtcod.light_green)
         libtcod.console_print_ex(panel, 1, 3, libtcod.BKGND_NONE, libtcod.LEFT, 'World map')
@@ -695,6 +752,7 @@ def player_death(player):
     player.color = libtcod.dark_red
  
 def monster_death(monster):
+    global objects
     #transform it into a nasty corpse! it doesn't block, can't be
     #attacked and doesn't move
     message(monster.name.capitalize() + ' is dead! You gain ' + str(monster.fighter.xp) + ' experience points.', game_msgs, libtcod.orange)
@@ -704,7 +762,12 @@ def monster_death(monster):
     monster.fighter = None
     monster.ai = None
     monster.name = 'remains of ' + monster.name
+    x = monster.x
+    y = monster.y
+    item = generate_item(x, y)
     monster.send_to_back()
+    objects.append(item)
+    item.send_to_back()
  
 def target_tile(max_range=None):
     #return the position of a tile left-clicked in player's FOV (optionally in a range), or (None,None) if right-clicked.
@@ -818,11 +881,11 @@ def random_battle():
     
     rand_int = libtcod.random_get_int(0, 1, 12)
     if rand_int > 11:
-        dungeon_level = 0
         random_x = player.x
         random_y = player.y
         for obj in objects:
             if obj.x == random_x and obj.y == random_y and not obj.name == 'player' and not obj.name == 'stairs':
+                dungeon_level = 0
                 primary_type_name = obj.name
                 print obj.name
                 primary_color = obj.color
@@ -851,6 +914,7 @@ def random_battle():
                                 ro = game_object(x, y, '"', 'grass', libtcod.green, always_visible=True)
                         objects.append(ro)
                 initialize_fov()
+                random_battle_place_objects()
                 break
             
 def leave_random():
@@ -1134,6 +1198,8 @@ stairs = None
 player = None
 random_x = None
 random_y = None
+monster_colors = {'green':libtcod.green, 'light_green':libtcod.light_green, 'dark_green':libtcod.dark_green, 'brass':libtcod.brass, 'dark_red':libtcod.dark_red, 'red':libtcod.red, 'gray':libtcod.gray, 'sky':libtcod.sky, 'violet':libtcod.violet}
+item_properties = {'sword':'power', 'dagger':'power', 'mace':'power', 'hammer':'power', 'shield':'defense', 'armour':'defense', 'cape':'defense', 'armor':'defense', 'magic':'random'}
 pygame.init()
 pygame.mixer.init()
  
