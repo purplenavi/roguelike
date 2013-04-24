@@ -36,10 +36,12 @@ class Spell:
         
             
     def cast_strength(self, game_msgs, player):
-        pass
+        self.player.fighter.power += 1
+        message('You feel stronger!', game_msgs, libtcod.red)
     
     def cast_defense(self, game_msgs, player):        
-        pass
+        self.player.fighter.defense += 1
+        message('You feel sturdier!', game_msgs, libtcod.red)
     
     def cast_heal(self, game_msgs, player):
         #heal the player

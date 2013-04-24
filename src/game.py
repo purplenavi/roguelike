@@ -3,7 +3,7 @@ import math
 import textwrap
 import shelve
 import pygame
-import sys, os
+import sys, os, time
 from Room import *
 from Tile import *
 from Fighter import *
@@ -63,10 +63,31 @@ color_light_ground3 = libtcod.Color(200, 150, 100)
 
 color_outside = libtcod.Color(0, 0, 0)
 
-LEVEL_UP_BASE = 200
-LEVEL_UP_FACTOR = 150
+LEVEL_UP_BASE = 50
+LEVEL_UP_FACTOR = 70
 LEVEL_SCREEN_WIDTH = 40
 CHARACTER_SCREEN_WIDTH = 30
+
+class quest:
+    #simple class to keep track of quest data
+    def __init__(self, description, monsters_to_kill, message_after_completion, exp, quest_giver, special_monster = None):
+        self.description = description
+        self.monsters_to_kill = monsters_to_kill
+        self.message_after_completion = message_after_completion
+        self.exp = exp
+        self.quest_giver = quest_giver
+        self.special_monster = None
+        self.killed = 0
+        self.complete = False
+        
+    def increment_kill(self, game_msgs):
+        self.killed += 1
+        self.quest_complete(game_msgs)
+        
+    def quest_complete(self, game_msgs):
+        if self.killed == self.monsters_to_kill:
+            self.complete = True
+            message('Quest ' + self.description + ' complete!', game_msgs)
  
 class game_object:
     #this is a generic object: the player, a monster, an item, the stairs...
@@ -105,6 +126,10 @@ class game_object:
             self.x += dx
             self.y += dy
             
+    def move_through(self, dx, dy):
+        global dungeon, objects
+        self.x += dx
+        self.y += dy
         
     def get_all_equipped(self):
         if self.name == 'player':
@@ -256,7 +281,7 @@ def make_map():
     stairs = game_object(new_x, new_y, '<', 'stairs', libtcod.white, always_visible=True)
     objects.append(stairs)
     stairs.send_to_back()#Drawn under monsters
-    dungeon_levels.append(dungeon)
+    dungeon_levels[dungeon_level] = dungeon
  
 def random_battle_place_objects():
     monster_data = open('monsters.data')
@@ -630,6 +655,9 @@ def handle_keys():
  
     elif key.vk == libtcod.KEY_ESCAPE:
         return 'exit'  #exit game
+    
+    if game_state == 'targeting':
+        move_target()
  
     if game_state == 'playing':
         #movement keys, this could use some more work to make it more clear, but as of now i have no time :(
@@ -727,7 +755,8 @@ def handle_keys():
                     if obj.x == player.x and obj.y == player.y and obj.item:
                         obj.item.pick_up(inventory, objects, game_msgs)
                         break
- 
+            if key_char == 't':
+                create_target_object(player.x, player.y)
             if key_char == 'i':
                 #show the inventory; if an item is selected, use it
                 chosen_item = inventory_menu('Press the key next to an item to use it, or any other to cancel.\n')
@@ -750,17 +779,25 @@ def handle_keys():
                     if obj.x == player.x and obj.y == player.y and obj.char == 'O':
                         enter_town(player.x, player.y)
             if key_char == '>':
-                if not upstairs == None:
-                    if upstairs.x == player.x and upstairs.y == player.y:
-                        go_up()
+                for u in objects:
+                    if u.name == 'upstairs':
+                        if upstairs.x == player.x and upstairs.y == player.y:
+                            go_up()
             if key_char == 'c':
                 level_up_xp = LEVEL_UP_BASE + player.level*LEVEL_UP_FACTOR
+                quests_string = '\nQuests :'
+                for q in player_quests:
+                    quests_string += q.description 
+                    quests_string += '\nMonsters killed '
+                    quests_string = quests_string + str(q.killed) + '/' + str(q.monsters_to_kill) 
                 msgbox('Character information\n\nLEVEL: ' + str(player.level) + 
                        '\nXP: ' + str(player.fighter.xp) + 
                        '\nXP TO LVL UP: ' + str(level_up_xp) + 
                        '\nMAX HP: ' + str(player.fighter.max_hp) + 
                        '\nSTRENGHT ' + str(player.fighter.power) + 
-                       '\nDEFENCE ' + str(player.fighter.defense), CHARACTER_SCREEN_WIDTH)
+                       '\nDEFENCE ' + str(player.fighter.defense) +
+                       quests_string, CHARACTER_SCREEN_WIDTH)
+                time.sleep(0.5)
  
             return 'didnt-take-turn'
  
@@ -775,9 +812,10 @@ def player_death(player):
     player.color = libtcod.dark_red
  
 def monster_death(monster):
-    global objects
+    global objects, player_quests, game_msgs
     #transform it into a nasty corpse! it doesn't block, can't be
     #attacked and doesn't move
+    monster_name = monster.name
     message(monster.name.capitalize() + ' is dead! You gain ' + str(monster.fighter.xp) + ' experience points.', game_msgs, libtcod.orange)
     monster.char = '%'
     monster.color = libtcod.dark_red
@@ -788,9 +826,14 @@ def monster_death(monster):
     x = monster.x
     y = monster.y
     item = generate_item(x, y)
-    monster.send_to_back()
     objects.append(item)
-    item.send_to_back()
+    if not dungeon_level == 1:
+        for q in player_quests:
+            if not q.special_monster:
+                q.increment_kill(game_msgs)
+            if q.special_monster:
+                if q.special_monster == monster_name:
+                    q.increment_kill(game_msgs)
  
 def target_tile(max_range=None):
     #return the position of a tile left-clicked in player's FOV (optionally in a range), or (None,None) if right-clicked.
@@ -839,27 +882,33 @@ def closest_monster(max_range):
 
  
 def save_game():
-    #open a new empty shelve (possibly overwriting an old one) to write the game data
-    savefile = shelve.open('save', 'n')
-    savefile['dungeon'] = dungeon
-    savefile['objects'] = objects
-    savefile['player_index'] = objects.index(player)  #index of player in objects list
-    savefile['inventory'] = inventory
-    savefile['game_msgs'] = game_msgs
-    savefile['game_state'] = game_state
-    if not stairs == None and not dungeon_level == 0 and not player_in_town:
-            savefile['stairs_index'] = objects.index(stairs)
+    if dungeon_level == 0:
+        message('Cannot save while in battle!', game_msgs, libtcod.red)
     else:
+        #open a new empty shelve (possibly overwriting an old one) to write the game data
+        savefile = shelve.open('save', 'n')
+        savefile['dungeon'] = dungeon
+        savefile['objects'] = objects
+        save_player = None
+        for p in objects:
+            if p.name == 'player':
+                save_player = p
+        savefile['player_index'] = objects.index(save_player)  #index of player in objects list
+        savefile['inventory'] = inventory
+        savefile['game_msgs'] = game_msgs
+        savefile['game_state'] = game_state
         savefile['stairs_index'] = None
-    if not upstairs == None:
-        savefile['upstairs_index'] = objects.index(upstairs)
-    else:
         savefile['upstairs_index'] = None
-    savefile['dungeon_level'] = dungeon_level
-    savefile['dungeon_levels'] = dungeon_levels
-    savefile['level_objects'] = level_objects
-    savefile['world_loc'] = world_loc
-    savefile.close()
+        for u in objects:
+            if u.name == 'upstairs' and not player_in_town and not dungeon_level == 0:
+                savefile['upstairs_index'] = objects.index(u)
+            if u.name == 'stairs' and not dungeon_level == 0 and not player_in_town:
+                savefile['stairs_index'] = objects.index(u)
+        savefile['dungeon_level'] = dungeon_level
+        savefile['dungeon_levels'] = dungeon_levels
+        savefile['level_objects'] = level_objects
+        savefile['world_loc'] = world_loc
+        savefile.close()
  
 def load_game():
     #open the previously saved shelve and load the game data
@@ -871,9 +920,13 @@ def load_game():
     inventory = loadfile['inventory']
     game_msgs = loadfile['game_msgs']
     game_state = loadfile['game_state']
-    stairs = objects[loadfile['stairs_index']]
+    stairs_in = loadfile['stairs_index']
     upstairs_in = loadfile['upstairs_index']
-    if not upstairs_in == None:
+    if stairs_in:
+        stairs = objects[stairs_in]
+    else:
+        stairs = None
+    if upstairs_in:
         upstairs = objects[upstairs_in]
     else:
         upstairs = None
@@ -908,17 +961,13 @@ def random_battle():
         random_y = player.y
         for obj in objects:
             if obj.x == random_x and obj.y == random_y and not obj.name == 'player' and not obj.name == 'stairs':
-                dungeon_level = 0
                 primary_type_name = obj.name
-                print obj.name
                 primary_color = obj.color
                 primary_terrain = obj.char
-                for z in objects:
-                    if z.name == 'player':
-                        objects.remove(z)
                 message('You are under attack!', game_msgs, libtcod.red)
-                level_objects.append(objects)
-                dungeon_levels.append(dungeon)
+                level_objects[dungeon_level] = objects
+                dungeon_levels[dungeon_level] = dungeon
+                dungeon_level = 0
                 objects = [player]
                 dungeon = Dungeon(MAP_HEIGHT, MAP_WIDTH)
                 player.x = MAP_WIDTH / 2
@@ -943,22 +992,109 @@ def random_battle():
 def leave_random():
     global player, dungeon, dungeon_level, objects, level_objects
     if player.x < 3 or player.x > MAP_WIDTH - 3 or player.y < 3 or player.y > MAP_HEIGHT - 3:#Exit to worldmap
-        dungeon = dungeon_levels[-1]
-        objects = level_objects[-1]
-        dungeon_levels.remove(dungeon)
-        level_objects.remove(objects)
         dungeon_level = 1
-        objects.append(player)
+        dungeon = dungeon_levels[dungeon_level]
+        objects = level_objects[dungeon_level]
+        #dungeon_levels.remove(dungeon)
+        #level_objects.remove(objects)
         player.set_cords(random_x, random_y)
         initialize_fov()
                 
-                
+
+def create_target_object(x, y):
+    #This pauses the game and creates a targeting object
+    global key, game_state
+    game_state = 'targeting'
+    targeting_object = game_object(x, y, '_', 'target', libtcod.white)
+    objects.append(targeting_object)
+    message('Target mode on. Move cursor with numpad keys, hit enter when cursor is in desired place', game_msgs, libtcod.white)
+    
+def move_target():
+    #moves the target, and prints npc talk if enter is hit on top of npc
+    global game_state, objects
+    targeting_object = None
+    for i in objects:
+        if i.name == 'target':
+            targeting_object = i
+    #moving the target
+    if key.vk == libtcod.KEY_KP8:
+        targeting_object.move_through(0, -1)
+        target_message()
+    if key.vk == libtcod.KEY_KP7:
+        targeting_object.move_through(-1, -1)
+        target_message()
+    if key.vk == libtcod.KEY_KP9:
+        targeting_object.move_through(1, -1)
+        target_message()
+    if key.vk == libtcod.KEY_KP4:
+        targeting_object.move_through(-1, 0)
+        target_message()
+    if key.vk == libtcod.KEY_KP6:
+        targeting_object.move_through(1, 0)
+        target_message()
+    if key.vk == libtcod.KEY_KP1:
+        targeting_object.move_through(-1, 1)
+        target_message()
+    if key.vk == libtcod.KEY_KP2:
+        targeting_object.move_through(0, 1)
+        target_message()
+    if key.vk == libtcod.KEY_KP3:
+        targeting_object.move_through(1, 1)
+        target_message()
+    if key.vk == libtcod.KEY_ENTER:
+        #Enter pressed, continuing gameplay
+        game_state = 'playing'
+        for npc in objects:
+            if npc.x == targeting_object.x and npc.y == targeting_object.y and not npc.name == 'player' and not npc.name == 'target' and not npc.name in lifeless_objects:
+                if npc.talks:
+                    #if the npc has something to say, check for quest
+                    for q in player_quests:
+                        #if player has quest from that npc and it's complete, call cash in quest
+                        if q.quest_giver == npc.name and q.complete == True:
+                            cash_complete_quest(q)
+                            npc.talks = q.message_after_completion
+                    message(npc.talks, game_msgs, libtcod.brass)
+                    #if npc has quest to give, call create_quest
+                    create_quest(npc.name)
+                else:
+                    message('The ' + npc.name + ' stares at you silently.', game_msgs, libtcod.gray)
+        for i in objects:
+            if i.name == targeting_object.name:
+                objects.remove(i)
+    
+    fov_recompute = True
  
+def target_message(): 
+    #creates message for what's under the cursor atm
+    tx = None
+    ty = None
+    for t in objects:
+        if t.name == 'target':
+            tx = t.x
+            ty = t.y
+    for t in objects:
+        if t.x == tx and t.y == ty and not t.name == 'target':
+            message(t.name, game_msgs, libtcod.violet)
+            
+def create_quest(name):
+    #This moves a quest from quests to player quests
+    global player_quests, quests
+    for q in quests:
+        if q.quest_giver == name:
+            player_quests.append(q)
+            quests.remove(q)
+    
+def cash_complete_quest(q):
+    #cash in the quest, reward player with exp
+    player.fighter.xp += q.exp
+    player_quests.remove(q)
+
 def new_game():
-    global player, inventory, game_msgs, game_state, dungeon_level, dungeon_levels, level_objects, dungeon, objects, world_loc, stairs, village_objects
+    #Constructs a new game
+    global player, inventory, game_msgs, game_state, dungeon_level, dungeon_levels, level_objects, dungeon, objects, world_loc, stairs, village_objects, quests
     inventory = []
-    dungeon_levels = []
-    level_objects = []
+    dungeon_levels = {}
+    level_objects = {}
     worldmap = open("worldmap.txt")
     lines = worldmap.readlines()
     he = 0
@@ -1004,6 +1140,7 @@ def new_game():
                         city_w = None
                         city_name = None
                         while 1:
+                            #parse all city villager data
                             if fetch_data[num].startswith('CITY') and z in fetch_data[num]:#We have a hit :)
                                 tmp = fetch_data[num].strip('\n')
                                 tmp = tmp.split('#')
@@ -1015,6 +1152,22 @@ def new_game():
                                     fetch_data[num] = fetch_data[num].strip('\n')
                                     villagers.append(fetch_data[num])
                                     num += 1
+                            #parse all quest data and set it to quests
+                            if fetch_data[num].startswith('QUEST') and z in fetch_data[num]:
+                                while not fetch_data[num].startswith('MAP'):
+                                    data = fetch_data[num].strip('\n')
+                                    data = data.split('#')
+                                    for key in quest_types:
+                                        if key in fetch_data[num]:
+                                            quest_giver = None
+                                            for vi in villagers:
+                                                if data[1] in vi:
+                                                    quest_giver = vi.split('#')
+                                                    quest_giver = quest_giver[1]
+                                            q = quest(data[2], int(data[3]), data[5], int(data[4]), quest_giver)
+                                            quests.append(q)
+                                    num += 1
+                            #parse all map data
                             if fetch_data[num].startswith('MAP') and z in fetch_data[num]: #Map data for corresponding number :)
                                 city = Dungeon(city_h, city_w)
                                 num += 1
@@ -1029,21 +1182,24 @@ def new_game():
                                             if c == '1' or c == '2':
                                                 for villager in villagers:
                                                     if c in villager: #Found the corresponding villager
+                                                        #create quest giver npcs
                                                         d = villager.split('#')
-                                                        ai = NPC(player)
-                                                        vil = game_object(city_x, city_y, d[2], d[1], d[3], blocks=True, ai=ai)
+                                                        ai = questgiver(player)
+                                                        co = game_object(city_x, city_y, '.', 'grass', libtcod.green, always_visible=True)
+                                                        vil = game_object(city_x, city_y, d[2], d[1], d[3], blocks=True, ai=ai, talks=d[6])
+                                                        villager_obj.append(co)
                                                         villager_obj.append(vil)
-                                                        co = game_object(city_x, city_y, c, 'grass', libtcod.green, always_visible=True)
                                                         villagers.remove(villager)
-                                            if c == '=': #water
-                                                co = game_object(city_x, city_y, c, 'water', libtcod.blue, always_visible=True)
-                                            if c == 'T': #tree
-                                                co = game_object(city_x, city_y, c, 'tree', libtcod.dark_green, always_visible=True)
-                                            if c == '.': #grass
-                                                co = game_object(city_x, city_y, c, 'grass', libtcod.green, always_visible=True)
-                                            if c == '-': #door
-                                                co = game_object(city_x, city_y, c, 'door', libtcod.green, always_visible=True)
-                                            villager_obj.append(co)
+                                            else:
+                                                if c == '=': #water
+                                                    co = game_object(city_x, city_y, c, 'water', libtcod.blue, always_visible=True)
+                                                if c == 'T': #tree
+                                                    co = game_object(city_x, city_y, c, 'tree', libtcod.dark_green, always_visible=True)
+                                                if c == '.': #grass
+                                                    co = game_object(city_x, city_y, c, 'grass', libtcod.green, always_visible=True)
+                                                if c == '-': #door
+                                                    co = game_object(city_x, city_y, c, 'door', libtcod.green, always_visible=True)
+                                                villager_obj.append(co)
                                         else:
                                             co = game_object(city_x, city_y, c, 'wall', libtcod.gray, always_visible=True)
                                             villager_obj.append(co)
@@ -1052,14 +1208,19 @@ def new_game():
                                     city_y += 1
                                     num += 1
                                 while len(villagers) > 0:
+                                    #randomly insert rest of the villagers
                                     rand_x = libtcod.random_get_int(0, 4, city_w - 4)
                                     rand_y = libtcod.random_get_int(0, 4, city_h - 4)
                                     if not city.is_blocked(rand_x, rand_y, villager_obj):
                                         last_guy = villagers[-1]
                                         d = last_guy.split('#')
                                         ai = NPC(player)
-                                        random_gibberish = libtcod.random_get_int(0, 0, len(general_phrases) - 1)
-                                        vil = game_object(rand_x, rand_y, d[2], d[1], d[3], blocks=True, ai=ai, talks=general_phrases[random_gibberish])
+                                        if d[1] == 'cow':
+                                            random_gibberish = libtcod.random_get_int(0, 0, len(cow_sounds) - 1)
+                                            vil = game_object(rand_x, rand_y, d[2], d[1], d[3], blocks=True, ai=ai, talks=cow_sounds[random_gibberish])
+                                        else:
+                                            random_gibberish = libtcod.random_get_int(0, 0, len(general_phrases) - 1)
+                                            vil = game_object(rand_x, rand_y, d[2], d[1], d[3], blocks=True, ai=ai, talks=general_phrases[random_gibberish])
                                         villager_obj.append(vil)
                                         villagers.remove(last_guy)
                                 village_objects[city_name] = villager_obj
@@ -1084,10 +1245,9 @@ def new_game():
                 x += 1
             y += 1
     dungeon = world
-    dungeon_levels.append(dungeon)
-    world_loc = True
-    
     dungeon_level = 1
+    dungeon_levels[dungeon_level] = dungeon
+    world_loc = True
     initialize_fov()
  
     game_state = 'playing'
@@ -1112,10 +1272,15 @@ def next_level():
             objects.remove(obj)
     if world_loc == True:
         world_loc = False
-    if len(dungeon_levels) >= dungeon_level:
+    is_in_dungeon_levels = False
+    for key in dungeon_levels:
+        if key == dungeon_level:
+            is_in_dungeon_levels = True
+    if is_in_dungeon_levels:
         message('You go down... Again.', game_msgs, libtcod.light_lime)
-        dungeon = dungeon_levels[dungeon_level - 1]
-        objects = level_objects[dungeon_level - 1]
+        dungeon = dungeon_levels[dungeon_level]
+        objects = level_objects[dungeon_level]
+        objects.append(player)
         player_x = None
         player_y = None
         for i in objects:
@@ -1128,7 +1293,7 @@ def next_level():
         player.set_cords(player_x, player_y)
         initialize_fov()
     else:
-        level_objects.append(objects)
+        level_objects[dungeon_level-1] = objects
         message('Once again, you are wrapped in darkness as you progress deeper into the dungeon...', game_msgs, libtcod.light_chartreuse)
         make_map()
         initialize_fov()
@@ -1139,11 +1304,14 @@ def go_up():
     for i in objects:
         if i.name == 'player':
             objects.remove(i)
-    level_objects.append(objects)
+    level_objects[dungeon_level] = objects
     message('You slowly ascend the stairs...', game_msgs, libtcod.light_azure)
     dungeon_level -= 1
-    dungeon = dungeon_levels[dungeon_level - 1]
-    objects = level_objects[dungeon_level - 1]
+    dungeon = dungeon_levels[dungeon_level]
+    objects = level_objects[dungeon_level]
+    for obj in objects:
+        if obj.name == 'player':
+            objects.remove(obj)
     objects.append(player)
     player_x = None
     player_y = None
@@ -1169,9 +1337,14 @@ def enter_town(x, y):
     for obj in objects:
         if obj.x == x and obj.y == y and not obj.name == 'player':
             town_name = obj.name
+    insert_to = True
+    for key in dungeon_levels:
+        if key == dungeon_level:
+            insert_to = False
+    if insert_to:
+        dungeon_levels[dungeon_level] = dungeon
+    level_objects[dungeon_level] = objects
     dungeon_level = town_name
-    level_objects.append(objects)
-    dungeon_levels.append(dungeon)
     objects = village_objects[town_name]
     dungeon = cities[town_name]
     objects.append(player)
@@ -1182,10 +1355,12 @@ def leave_town():
     global player, dungeon, dungeon_level, objects, level_objects, previous_dungeon_level, player_in_town
     if player.x < 3 or player.x > MAP_WIDTH - 3 or player.y < 3 or player.y > MAP_HEIGHT - 3:#Exit to worldmap
         player_in_town = False
-        dungeon = dungeon_levels[-1]
-        objects = level_objects[-1]
         town_name = dungeon_level
         dungeon_level = previous_dungeon_level
+        dungeon = dungeon_levels[dungeon_level]
+        #dungeon_levels.remove(dungeon)
+        objects = level_objects[dungeon_level]
+        #level_objects.remove(objects)
         previous_dungeon_level = None
         x = None
         y = None
@@ -1233,6 +1408,7 @@ def check_level_up():
                 player.fighter.base_max_hp += 5
                 player.fighter.hp += 5
                 stat_points -= 1
+            time.sleep(0.5)
                 
 def from_dungeon_level(table):
     for (v, l) in reversed(table):
@@ -1303,12 +1479,12 @@ def main_menu():
         libtcod.image_blit_2x(img, 0, 0, 0)
         pygame.mixer.music.play(1)
         #show the game's title, and some credits!
-        libtcod.console_set_default_foreground(0, libtcod.light_purple)
+        libtcod.console_set_default_foreground(0, libtcod.dark_green)
         libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-4, libtcod.BKGND_NONE, libtcod.CENTER,
-            'ROGUELIKE FOR THE TKK PYTHON COURSE')
+            'Shadows of the Python')
         libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT-20, libtcod.BKGND_NONE, libtcod.CENTER,
-            'Made by 79040A')
-        libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT-18, libtcod.BKGND_NONE, libtcod.CENTER, 'Alex Roguelike, Copyright (C) 2013 Aleksi Salonen\nAlex Roguelike comes with ABSOLUTELY NO WARRANTY;\n This is free software, and you are welcome\nto redistribute it under certain conditions;')
+            '---A roguelike for the python course---')
+        libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT-18, libtcod.BKGND_NONE, libtcod.CENTER, 'Shadows of the Python, Copyright (C) 2013 Aleksi Salonen\nShadows of the Python comes with ABSOLUTELY NO WARRANTY;\n This is free software, and you are welcome\nto redistribute it under certain conditions.')
  
         #show options and wait for the player's choice
         choice = menu('', ['NEW GAME', 'LOAD GAME', 'QUIT'], 24)
@@ -1319,6 +1495,7 @@ def main_menu():
         if choice == 1:  #load last game
             try:
                 load_game()
+                time.sleep(0.5)
             except:
                 msgbox('\n No saved game to load.\n', 24)
                 continue
@@ -1332,8 +1509,8 @@ libtcod.sys_set_fps(LIMIT_FPS)
 con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
 panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
 game_msgs = []
-dungeon_levels = []
-level_objects = []
+dungeon_levels = {}
+level_objects = {}
 village_objects = {}
 cities = {}
 player_in_town = False
@@ -1343,10 +1520,14 @@ player = None
 random_x = None
 random_y = None
 previous_dungeon_level = None
-monster_colors = {'green':libtcod.green, 'light_green':libtcod.light_green, 'dark_green':libtcod.dark_green, 'brass':libtcod.brass, 'dark_red':libtcod.dark_red, 'red':libtcod.red, 'gray':libtcod.gray, 'sky':libtcod.sky, 'violet':libtcod.violet}
+monster_colors = {'green':libtcod.green, 'light_green':libtcod.light_green, 'dark_green':libtcod.dark_green, 'brass':libtcod.brass, 'dark_red':libtcod.dark_red, 'red':libtcod.red, 'gray':libtcod.gray, 'sky':libtcod.sky, 'violet':libtcod.violet, 'yellow':libtcod.yellow}
 item_properties = {'sword':'power', 'dagger':'power', 'mace':'power', 'hammer':'power', 'shield':'defense', 'armour':'defense', 'cape':'defense', 'armor':'defense', 'magic':'random'}
 general_phrases = ['Hello!', 'How are you doing?', 'Are you new here?', 'Day looks lovely today.', 'BRAAAAAINSSSS!']
 cow_sounds = ['Moo', 'MOOooo', '....']
+lifeless_objects = ['grass', 'tree', 'rocks', 'wall', 'water', 'door']
+quest_types = {'kill':1}
+quests = []
+player_quests = []
 pygame.init()
 pygame.mixer.init()
  

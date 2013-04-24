@@ -3,8 +3,8 @@
 #if location is empty, randomly toss somewhere. If quest is empty, npc has no quest to offer
 CITY#1#Python Town#43#80
 NPC
-#village elder#@#yellow#1#quest 1
-#kid#@#sky#2#quest 2
+#village elder#@#yellow#1#quest 1#Hello stranger! Would you like to earn some extra money? There's a cave nearby filled with monsters. Care to kill 10 of 'em?
+#kid#@#sky#2#quest 2#Have you seen my dog? I haven't seen it since yesterday...
 #girl#@#red#
 #villager#@#brass#
 #villager#@#brass#
@@ -25,6 +25,8 @@ NPC
 #cow#C#sky#
 #cow#C#sky#
 #cow#C#sky#
+QUEST#1
+#1#kill 10 monsters in cave#10#400#Thank the lord! You have saved us all!
 MAP#1
 ................................................................................
 ................................................................................

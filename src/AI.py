@@ -22,6 +22,12 @@ class NPC:
             self.owner.move(0, -1)
         if self.owner.x > 4 and self.owner.x < 79 and self.owner.y > 4 and self.owner.y < 39: #I hate magic numbers, but for now they'll do
             self.owner.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
+    
+class questgiver:
+    def __init__(self, player):
+        self.player = player
+    def take_turn(self, game_msgs):
+        pass
             
 class BasicMonster:
     #AI for a basic monster.
