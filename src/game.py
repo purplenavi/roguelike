@@ -935,7 +935,7 @@ def load_game():
     level_objects = loadfile['level_objects']
     world_loc = loadfile['world_loc']
     loadfile.close()
-    os.remove('save')
+    #os.remove('save')
     initialize_fov()
     
 def create_world_message():
@@ -978,7 +978,10 @@ def random_battle():
                         dungeon.get_dungeon()[x][y].block_sight = False
                         rand_terrain = libtcod.random_get_int(0, 1, 10)
                         if rand_terrain < 8: #Primary terrain
-                            ro = game_object(x, y, primary_terrain, primary_type_name, primary_color, always_visible=True)
+                            if primary_terrain == 'O' or primary_terrain == 'o':
+                                ro = game_object(x, y, '"', 'grass', libtcod.green, always_visible=True)
+                            else:
+                                ro = game_object(x, y, primary_terrain, primary_type_name, primary_color, always_visible=True)
                         else:
                             if primary_type_name == 'grass':
                                 ro = game_object(x, y, '&', 'tree', libtcod.dark_green, always_visible=True)
